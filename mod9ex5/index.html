@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Module9-Lab-Exercise5 - Socket.IO chat</title>
+    <style>
+      body {
+        margin: 0;
+        padding-bottom: 3rem;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+
+      #form {
+        background: rgba(0, 0, 0, 0.15);
+        padding: 0.25rem;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        height: 3rem;
+        box-sizing: border-box;
+        backdrop-filter: blur(10px);
+      }
+      #input {
+        border: none;
+        padding: 0 1rem;
+        flex-grow: 1;
+        border-radius: 2rem;
+        margin: 0.25rem;
+      }
+      #input:focus {
+        outline: none;
+      }
+      #form > button {
+        background: #333;
+        border: none;
+        padding: 0 1rem;
+        margin: 0.25rem;
+        border-radius: 3px;
+        outline: none;
+        color: #fff;
+      }
+
+      #messages {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+      #messages > li {
+        padding: 0.5rem 1rem;
+      }
+      #messages > li:nth-child(odd) {
+        background: #efefef;
+      }
+
+      .connectionMsg {
+        font-style: italic;
+        color: green;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Welcome to the chat<span id="username"></span></h1>
+    <span id="count">0</span> users online : <span id="list"></span>
+    <section id="online"></section>
+    <p id="typing"></p>
+    <div id="user">
+      <form id="nicknameForm">
+        <input id="nickname" type="text" placeholder="Your nickname here" />
+        <button>Connect</button>
+      </form>
+    </div>
+    <div id="chat" class="hidden">
+      <ul id="messages"></ul>
+      <form id="form" action="">
+        <input id="input" autocomplete="off" /><button>Send</button>
+      </form>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const form = document.getElementById("form");
+      const input = document.getElementById("input");
+      const inputNickName = document.getElementById("nickname");
+      const clientSocket = io();
+
+      //To append message line by line.
+      function printMessage(msg) {
+        let item = document.createElement("li");
+        // Add Support for Nicknames.
+        if (msg.nickname) {
+          item.textContent = msg.nickname + ": ";
+        }
+        item.textContent += msg.text;
+        if (msg.connectionMsg) {
+          item.className = "connectionMsg";
+        }
+        let messages = document.getElementById("messages");
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+
+      //In order to optimize speed, sender's message gets appended
+      //by JS only, not by socket server.
+      function printMyMessage(msg) {
+        let item = document.createElement("li");
+        item.textContent = "You: " + msg;
+        if (msg.connectionMsg) {
+          item.className = "connectionMsg";
+        }
+        let messages = document.getElementById("messages");
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+
+      //To invoke first message when the page is accessed.
+      window.addEventListener("load", (event) => {
+        console.log("page is fully loaded");
+        clientSocket.emit("new user");
+      });
+
+      //To pass nickname who is about to leave.
+      window.addEventListener("beforeunload", function (e) {
+        clientSocket.emit("close browser", { nickname: inputNickName.value });
+      });
+
+      //Sending chat message.
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (input.value && inputNickName.value) {
+          clientSocket.emit("chat message", {
+            nickname: inputNickName.value,
+            text: input.value,
+          });
+          //Don’t send the same message to the user that sent it.
+          //Instead, append the message directly as soon as he/she presses enter.
+          printMyMessage(input.value);
+          input.value = "";
+        }
+      });
+
+      //Without entering nickname chat UI cannot be accessed.
+      nicknameForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (inputNickName.value) {
+          let chat = document.getElementById("chat");
+          chat.className = "";
+          let user = document.getElementById("user");
+          user.className = "hidden";
+          document.getElementById(
+            "username"
+          ).innerText = `   Name: ${inputNickName.value}`;
+          //To display who has joined.
+          clientSocket.emit("welcome", { nickname: inputNickName.value });
+        }
+      });
+
+      //To capture who is typing.
+      input.addEventListener("keydown", (event) => {
+        console.log("nick name ", inputNickName.value);
+        clientSocket.emit("typing", { nickname: inputNickName.value });
+      });
+
+      //Show who’s online.
+      clientSocket.on("userCount", function (msg) {
+        document.getElementById("count").innerHTML = msg;
+      });
+
+      //Show who’s online.
+      clientSocket.on("onlineUsers", function (msg) {
+        document.getElementById("list").innerHTML = msg;
+      });
+
+      clientSocket.on("chat message", function (msg) {
+        printMessage(msg);
+      });
+
+      clientSocket.on("new user", function (msg) {
+        printMessage(msg);
+      });
+
+      clientSocket.on("welcome", function (msg) {
+        printMessage(msg);
+      });
+
+      clientSocket.on("close browser", function (msg) {
+        printMessage(msg);
+      });
+
+      clientSocket.on("user disconnect", function (msg) {
+        printMessage(msg);
+        //To show who has left.
+        clientSocket.emit("close browser", { nickname: inputNickName.value });
+      });
+
+      clientSocket.on("typing", function (msg) {
+        let paragraph = document.getElementById("typing");
+        paragraph.innerText = msg.text;
+      });
+
+      clientSocket.on("not typing", function () {
+        let paragraph = document.getElementById("typing");
+        paragraph.innerText = "";
+      });
+    </script>
+  </body>
+</html>
